@@ -37,4 +37,4 @@ textures.h
 ----------
 Again, fairly self-explanatory. Textures are 64px square in 0RGB 32 bit format. The upper 8 bits are ignored currently.
 
-The textures can be a different size, but as above, all the same, and rebuild to incorporte changes.
+The textures can be a different size, but as above, all the same, and rebuild to incorporate changes.
