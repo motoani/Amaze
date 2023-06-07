@@ -6,6 +6,9 @@ char time_out[6]; // Build a string to display
 void end_game() // This is called when we pass through a portal
   {
   int i,x,xn,y; // indices to fill the screen
+  #ifdef RACER_DEBUG
+  Serial.println("Entered end_game");
+  #endif
 
     maze_choice++; // Move to the next level
     if (maze_choice<MAX_MAZE_CHOICES)

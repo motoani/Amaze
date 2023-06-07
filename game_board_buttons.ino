@@ -106,7 +106,7 @@ void key_debounce_callback(TimerHandle_t xTimer)
       oldkeys[pin_pos]=newkeys[pin_pos]; // save for next tick
       }// End of pin for-loop
   xQueueSend(Controller_key_queue, &key_pressed, 0); // Do not wait at all, better to skip a press than delay
-  #ifdef RACER_DEBUG
+  #ifdef RACER_DEBUG_2
   Serial.print("CONTROLLER KEY DEBOUNCE TIMER CALLBACK ");
   Serial.println(key_pressed);
   #endif

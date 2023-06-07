@@ -1,12 +1,16 @@
 # Amaze
 A maze game for ESP32 in Arduino framework. Makes a raycast 2.5D world. Easy to define new levels.
 
+v1.2 of 2023-06-07 Has some bugs removed and adds:
+* Transparent textures
+* 16 bit world map to enable more feature in the future
+
 Whilst the algorithm for raycasting is from https://lodev.org/cgtutor/raycasting.html it has been tailored to ESP32 hardware and TFT library.
 
 Aim of the game
 ---------------
 
-Navigate through the levels of the world as quickly as possible. Levels are exited through a portal. Currently there is an easy entry level and then a fairly tricky maze. Use the textures as clues...
+Navigate through the levels of the world as quickly as possible. Levels are exited through a portal.
 
 .h files should be modified to suit your personal situation as follows.
 
@@ -35,6 +39,10 @@ As the world is in a .h file Amaze must be rebuilt to show changes.
 
 textures.h
 ----------
-Again, fairly self-explanatory. Textures are 64px square in 0RGB 32 bit format. The upper 8 bits are ignored currently.
+Again, fairly self-explanatory.
+
+A 16 colour palette us define first in 32bit 0RGB format.
+
+Textures are 64px square in 0RGB 32 bit format. The upper 8 bits are ignored currently.
 
 The textures can be a different size, but as above, all the same, and rebuild to incorporate changes.

@@ -4,7 +4,7 @@
 * 2023-05-07
 * Raycast routine adapted from https://lodev.org/cgtutor/raycasting.html for ESP32
 * Depth cue shading is rapid and effective
-* Camera FOV and magnification adjeusted to give a fuller screen
+* Camera FOV and magnification adjusted to give a fuller screen
 * Being laid out for 128x128 but using additional screen area for mapping design etc
 * Four button control on GAMER board but will need reducing for the competition...
 * 2023-05-11
@@ -27,6 +27,29 @@
 * 2023-05-22
 * Work on the floor to remove an error at horizon and save texturing where the walls are
 * This may save a millisecond or so per loop
+* 2023-05-31
+* Working on allowing translucent walls which could act as windows or maybe even sprite-like
+* It is working but adds more overhead than expected even when there isn't a transparent block in FOV
+* 2023-06-01
+* New textures reveal that overlaid transparency doesn't work well - more of an issue with solid walls?
+* Fence-style textures show through both sides which looks odd
+* 2023-06-03
+* Vertical scale factor removed and vertical clipping to avoid sudden distortions at close range
+* 2023-06-05
+* Work on transparency with 'set to draw' by default and be cleared works OK
+* NS/EW flag used to skip one side of drawing, only used for transparent texture which are most likely to be fences or windows
+* Slows frame time to 40-60ms looking through two textures which isn't too shabby
+* 2023-06-06
+* Solid colour palette added to texture.h rather than code it
+* 2023-06-07
+* Setting up full 16 bit use in the world map
+*****************************************************************************************************
+* THINGS TO DO
+* COMPLETE REFORMAT OF MAZE WORDS TO USE FULL 16 BITS and thus allow more tetures
+* Can transparent textures be 'thin'?
+* Optimise transparency routine if possible
+* We've gone from duplicate rows being shown to just the face which doesn't make sense - why?
+***************************************************************************************************** 
 */
 
 /* RAY CASTING IS BASED ON THIS ROUTINE AS BELOW */
@@ -70,8 +93,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "Akhenaton_LYLD40pt7b.h" // A chosen freefont
 #include "end_game.h" // What to do at the end
 
-
-#define VIEW_SCALE 1.1 // Adjust the size shown, a Y axis multiplier
 #define SIDE_SCALE 0.8 // x side fading factor
 
 // Global variables needed by other modules and defined here
@@ -162,6 +183,7 @@ void setup() {
       #ifdef SHOW_RATE
       delay(200);
       Serial.begin(115200);
+      Serial.println("Entering Amaze");
       #endif
     }
 
@@ -186,6 +208,9 @@ void setup() {
   key_wait(); // Don't go until player presses
 
   game_start_time=millis(); // Record when we begin
+#ifdef RACER_DEBUG
+Serial.println("End of setup");
+#endif
 } // End of setup()
 
 void loop(){
@@ -195,12 +220,23 @@ void loop(){
       
       const float one_over_2pi = 1/(M_PI*2.f); //Make a reciprocal so can multiply later
 
+      bool allow_pixel_draw[VIEW_HEIGHT]; // An array that will be set to allow drawing and cleared as the front is drawn
+
+#ifdef RACER_DEBUG
+Serial.println("Start of loop");Serial.println("");
+#endif
+
     startraytime=millis(); // note when we entered the beginning of raycasting algorithm
 
     //FLOOR CASTING
   
     for(int y = FLOOR_HORIZON; y < VIEW_HEIGHT; y++)  // Added h/2 to miss the ceiling 3+ to avoid the horizontal rays
     {
+      #ifdef RACER_DEBUG
+      Serial.print("Floor cast pixel column is: ");Serial.println(y);
+      #endif
+
+
       // rayDir for leftmost ray (x = 0) and rightmost ray (x = width)
       float rayDirX0 = dirX - planeX;
       float rayDirY0 = dirY - planeY;
@@ -241,11 +277,12 @@ void loop(){
         int cellX = (int)(floorX);
         int cellY = (int)(floorY);
 
-        int texNum = worldMap[maze_choice][cellX][cellY]; // Find out what is in the cell
+        uint16_t texNum = worldMap[maze_choice][cellX][cellY]; // Find out what is in the cell
         unsigned long color;
         if (!(texNum & MAP_WALL_FLAG)) // It's a wall, not a floor, so skip mapping into a tile and sending pixels
+        // If it's a transparent block then some floor errors may be seen - make it higher!
         // This does mean that some sections of the floor are not drawn but they should be covered with wall! 
-        // THis should also save time especially when they are textured
+        // This should also save time especially when they are textured
         {
         if (texNum & MAP_TEXTURE_FLAG)
           {
@@ -259,15 +296,7 @@ void loop(){
           } // End of texture mapping
         else
           { // The cell isn't textured, but due to projection we still have to do pixel by pixel
-            switch(MAP_CHOICE_MASK & texNum)
-            {
-              case 1:  color=0x00e01010;    break; //red
-              case 2:  color=0x0010e010;  break; //green
-              case 3:  color=0x000000ff;   break; //blue
-              case 4:  color=0x00ffffff;  break; //white
-              case 5:  color=0x00ffff00;  break; //yellow
-              default: color=0x00808080; break; //grey
-            }
+            color=palette[MAP_CHOICE_MASK & texNum];
           } // End of plain colour fill
         // Plot the colored floor pixel and also do depth cue shading  
         view.drawPixel(x,y,RGB_scale_TFT(color,1.0-(rowDistance*depth_shade)));
@@ -279,6 +308,7 @@ void loop(){
     }
 
 #ifdef RACER_DEBUG
+Serial.println("End of floor casting and going to sky placement");
 int skystart=micros();
 #endif
 // Use the sky/mountain array to build the top half of the display
@@ -321,10 +351,18 @@ int skystart=micros();
     Serial.print("sky ");Serial.println(skyend-skystart);
     #endif
 // END OF SKY DISPLAY
+      #ifdef RACER_DEBUG
+      Serial.println("End of sky so now walls...");
+      #endif
 
     // WALL CASTING WITH SHADING AND OPTIONAL TEXTURES
-    for(int x = 0; x < VIEW_WIDTH; x++)
+    for(int x = 0; x < VIEW_WIDTH; x++) // Step across the display
     {
+      bool hit, solid, poss_transp;
+      // These flags are all cleared at the start of a new pixel column
+      solid=false; // Set if the wall is solid ie not a transparent texture
+      poss_transp=false; // Set if this column holds transparency
+
       #ifdef RACER_DEBUG
       Serial.print("Raycast x: ");
       Serial.println(x);
@@ -332,7 +370,7 @@ int skystart=micros();
 
       //calculate ray position and direction
       float cameraX = 2 * x * one_over_screenWidth - 1; //x-coordinate in camera space
-      float rayDirX = dirX + planeX * cameraX; // A lo0kup table was actually slower! 
+      float rayDirX = dirX + planeX * cameraX; // A lookup table was actually slower! 
       float rayDirY = dirY + planeY * cameraX;
       // which box of the map we're in
       int mapX = int(posX);
@@ -363,8 +401,9 @@ int skystart=micros();
       int stepY;
 
 
-      int hit = 0; //was there a wall hit?
+      //int hit = 0; //was there a wall hit?
       int side; //was a NS or a EW wall hit?
+
       //calculate step and initial sideDist
       if(rayDirX < 0)
       {
@@ -386,8 +425,12 @@ int skystart=micros();
         stepY = 1;
         sideDistY = (mapY + 1.0 - posY) * deltaDistY;
       }
+
+      while (!solid) // An extra loop around DDA and pixel column drawing to keep casting until a solid wall is reached
+      {
+      hit=false; // Set if any wall was hit during raycasting but clear it to search for next wall
       //perform DDA
-      while(hit == 0)
+      while(!hit) // Keep doing DDA until a wall is hit by raycaster
       {
         //jump to next map square, either in x-direction, or in y-direction
         if(sideDistX < sideDistY)
@@ -403,8 +446,39 @@ int skystart=micros();
           side = 1;
         }
         //Check if ray has hit a wall
-        if(MAP_WALL_FLAG & worldMap[maze_choice][mapX][mapY]) hit = 1;
-      }
+        //if(MAP_WALL_FLAG & worldMap[maze_choice][mapX][mapY]) hit = 1;
+        hit = MAP_WALL_FLAG & worldMap[maze_choice][mapX][mapY]; // So the loop will exit whatever type of wall is hit
+      } // End of raycast DDA while loop
+      // Will only exit here is the raycast has hit something
+
+      // If it isn't a transparent wall it must be solid so set the flag to exit the DDA cycle at the 'solid' while
+      solid = !(MAP_TRANSP_FLAG & worldMap[maze_choice][mapX][mapY]); // If it is transparent then DDA will be restarted after drawing
+
+      #ifdef RACER_DEBUG
+      Serial.print("X :");
+      Serial.print(x);
+      Serial.print("Maze map :");
+      Serial.print(worldMap[maze_choice][mapX][mapY]);
+      Serial.print("Hit :");
+      Serial.print(hit);
+      Serial.print("Solid :");
+      Serial.println(solid);
+      #endif
+
+      // Set a flag to say it's a transparency column, which is only cleared at next column
+      if (!poss_transp  && !solid)
+        {
+        #ifdef RACER_DEBUG
+        Serial.print("Set pos_transp :");
+        Serial.println(worldMap[maze_choice][mapX][mapY]);
+        #endif
+          poss_transp=true;
+          // As it's a transparent texture we need to invoke the transparency buffer
+          // Start by setting every pixel to true, only do it for affected columns to save time on purely solid cells
+          for (int looper=0;looper<VIEW_HEIGHT;++looper) allow_pixel_draw[looper]=true;
+        }
+      // else poss_transp=false is infered as it's cleared at the beginning of the loop
+
       //Calculate distance projected on camera direction. This is the shortest distance from the point where the wall is
       //hit to the camera plane. Euclidean to center camera point would give fisheye effect!
       //This can be computed as (mapX - posX + (1 - stepX) / 2) / rayDirX for side == 0, or same formula with Y
@@ -414,8 +488,15 @@ int skystart=micros();
       if(side == 0) perpWallDist = (sideDistX - deltaDistX);
       else          perpWallDist = (sideDistY - deltaDistY);
 
+      // Hoped to add 0.5 deltaDist X or Y  to step half a cell
+      // to appear in the centre of the cell for transparent textures
+      // but it didn't work (yet)
+//Serial.print(sideDistX);Serial.print(" ");Serial.print(sideDistY);Serial.print(" ");Serial.print(deltaDistX);Serial.print(" ");Serial.print(deltaDistY);Serial.println(" ");
+
+
+
       //Calculate height of line to draw on screen
-      int lineHeight = (int)(VIEW_SCALE*VIEW_HEIGHT / perpWallDist);
+      int lineHeight = (int)((float)VIEW_HEIGHT / perpWallDist);
       #ifdef RACER_DEBUG
       Serial.print("lineHeight :");
       Serial.print(lineHeight);
@@ -423,17 +504,25 @@ int skystart=micros();
       Serial.println(perpWallDist);
       #endif
       //calculate lowest and highest pixel to fill in current stripe
-      if (lineHeight>=VIEW_HEIGHT) lineHeight=VIEW_HEIGHT-1; // AKJ adaptation as TFT vline does 'height' rather than' 'end'
+      // Doing the range limitation casues sudden scale chnages as a texture is approached
+      // Whilst the TFT library is supposed to be safe to read out of range,
+      // at close up the transparency buffer is written out of range
+      //if (lineHeight>=VIEW_HEIGHT) lineHeight=VIEW_HEIGHT-1; // AKJ adaptation as TFT vline does 'height' rather than' 'end'
       int drawStart = -(lineHeight / 2) + VIEW_HEIGHT/2;
-      //if(drawStart < 0) drawStart = 0;
+      if(drawStart < 0) drawStart = 0;
       int drawEnd = (lineHeight / 2) + VIEW_HEIGHT/2; // DrawEnd is needed for textured walls
       if(drawEnd >= VIEW_HEIGHT) drawEnd = VIEW_HEIGHT - 1;
 
-      int texNum = worldMap[maze_choice][mapX][mapY]; // Find out what the cell codes for
+      uint16_t texNum = worldMap[maze_choice][mapX][mapY]; // Find out what the cell codes for
 
+      switch (texNum & (MAP_WALL_FLAG | MAP_TEXTURE_FLAG | MAP_TRANSP_FLAG)) // Mask off everything but the various wall flags
+      {
+      case MAP_WALL_FLAG | MAP_TEXTURE_FLAG: // handle an ordinary textured wall
+      #ifdef RACER_DEBUG
+      Serial.println("Textured solid wall cell");
+      #endif
       // This is the start of the textured wall element
-
-      if (texNum & MAP_TEXTURE_FLAG)
+      //if (texNum & MAP_TEXTURE_FLAG)
         { // The cell is textured wall
         //calculate value of wallX
         float wallX; //where exactly the wall was hit
@@ -450,36 +539,99 @@ int skystart=micros();
         float step = 1.0 * texHeight / lineHeight;
         // Starting texture coordinate
         float texPos = (drawStart - 0.5*VIEW_HEIGHT + 0.5*lineHeight) * step;
+
+        for(int y = drawStart; y<drawEnd; y++) // The max and min limit draw range and array entries
+        {
+          // Cast the texture coordinate to integer, and mask with (texHeight - 1) in case of overflow
+          int texY = (int)texPos & (texHeight - 1);
+          texPos += step;
+          uint32_t color = texture[MAP_CHOICE_MASK & texNum][texHeight * texY + texX]; // Pick pixels from the chosen texture
+
+          // Textures seem to need a more strident face shading
+          if(side == 1) {face_shade=SIDE_SCALE*0.8;} else {face_shade=1.0;} 
+ 
+          if (poss_transp) // We are on a transparent column && allow_pixel_draw[y]) // We are looking through transparent pixels
+            {
+              if (allow_pixel_draw[y])
+                {
+                  // Draw the texture behind as indicated
+                  view.drawPixel(x,y,RGB_scale_TFT(color,(face_shade*(1.0-(perpWallDist*depth_shade)))));
+                  allow_pixel_draw[y]=false; // Clear it now we've drawn in it
+                }
+            }
+          else
+            { // Not a transparent column so draw wahtever
+              view.drawPixel(x,y,RGB_scale_TFT(color,(face_shade*(1.0-(perpWallDist*depth_shade))))); // An ordinary texture draw
+            }
+        } // End of column texture draw
+        break;
+      } // End of wall texture code
+
+      case MAP_TRANSP_FLAG | MAP_WALL_FLAG | MAP_TEXTURE_FLAG:
+      #ifdef RACER_DEBUG
+      Serial.println("Transparent textured wall cell");
+      #endif
+      { // We are here with a transparent textured cell at this scan line
+        // This could be the first transparent texture cell or one behind it 
+        // Code copied from the ordinary textured block
+        //calculate value of wallX
+        float wallX; //where exactly the wall was hit
+
+        if (((texNum & MAP_RUNS_NORTH) && side==1)|| (!(texNum & MAP_RUNS_NORTH) && side==0) )
+        {// Only draw '1' side if runs N-S, and '0' if runs E-W
+
+        if (side == 0) wallX = posY + perpWallDist * rayDirY;
+        else           wallX = posX + perpWallDist * rayDirX;
+
+        wallX -= floor((wallX));
+
+        //x coordinate on the texture
+        int texX = int(wallX * float(texWidth));
+        if(side == 0 && rayDirX > 0) texX = texWidth - texX - 1;
+        if(side == 1 && rayDirY < 0) texX = texWidth - texX - 1;
+      
+        // How much to increase the texture coordinate per screen pixel
+        float step = 1.0 * texHeight / lineHeight;
+        // Starting texture coordinate
+        float texPos = (drawStart - 0.5*VIEW_HEIGHT + 0.5*lineHeight) * step;
+
         for(int y = drawStart; y<drawEnd; y++)
         {
           // Cast the texture coordinate to integer, and mask with (texHeight - 1) in case of overflow
           int texY = (int)texPos & (texHeight - 1);
           texPos += step;
           uint32_t color = texture[MAP_CHOICE_MASK & texNum][texHeight * texY + texX]; // Pick pixels from the chosen texture
-          //make color darker for y-sides: R, G and B byte each divided through two with a "shift" and an "and"
-          //if(side == 1) color = (color >> 1) & 8355711;
-          // Textures seem to need a more strident face shading
+
+          // Textures seem to need a more strident face shading than solid colours
           if(side == 1) {face_shade=SIDE_SCALE*0.8;} else {face_shade=1.0;} 
-          //buffer[y][x] = color;
-          view.drawPixel(x,y,RGB_scale_TFT(color,(face_shade*(1.0-(perpWallDist*depth_shade)))));
-        }
-      } // End of wall texture code
-      else
+ 
+          if (color)
+          { // Never draw if the pixel is coloured as 0x0000 ie transparent
+            if (poss_transp && allow_pixel_draw[y]) // We are looking through transparent pixels
+            {
+              view.drawPixel(x,y,RGB_scale_TFT(color,(face_shade*(1.0-(perpWallDist*depth_shade))))); // An ordinary texture draw
+              allow_pixel_draw[y]=false; // Clear it now we've drawn in it, this will be set from front backwards
+            }
+          } // End of if-color
+          // else its 0x0000 which is transparent so draw nothing and allow subsequent pixel draws by default
+        } // End of column texture draw     
+        #ifdef RACER_DEBUG
+        Serial.println("End of transparent textured wall pixel column");
+        #endif
+        } // End of only draw the side
+        break;
+      } // End of a transparent texture block code
+
+      case MAP_WALL_FLAG: // Handle a plain wall
+      #ifdef RACER_DEBUG
+      Serial.println("Plain wall cell");
+      #endif
+
       {
         //choose wall color
 // ESP32: adapt colours
         // ColorRGB color;
-        int color;
-        switch(MAP_CHOICE_MASK & texNum)
-          {
-            case 1:  color=0x00e01010;    break; //red
-            case 2:  color=0x0010e010;  break; //green
-            case 3:  color=0x000000ff;   break; //blue
-            case 4:  color=0x00ffffff;  break; //white
-            case 5:  color=0x00ffff00;  break; //yellow
-            default: color=0x00808080; break; //grey
-
-          } // End of color choice switch
+        int color=palette[MAP_CHOICE_MASK & texNum];
 
         //give x and y sides different brightness
 // ESP32: this shade adaptation won't work with TFT colour mapping, so we have our own shader
@@ -488,9 +640,25 @@ int skystart=micros();
         //draw the pixels of the stripe as a vertical line
 // ESP32: Draw a verical line 
         // shaded for depth cueing
-        view.drawFastVLine(x, drawStart, lineHeight, RGB_scale_TFT(color,(face_shade*(1.0-(perpWallDist*depth_shade)))));
-      }
-    } // End of else for non-textured walls
+        // If the scan column is not transparent then just draw a line
+        if (!poss_transp) view.drawFastVLine(x, drawStart, lineHeight, RGB_scale_TFT(color,(face_shade*(1.0-(perpWallDist*depth_shade))))); // No transparency issues
+        else
+        //if (poss_transp) // We are looking through transparent potentially, place a pixel if it can be seen
+          {
+          for(int yl = drawStart; yl<drawEnd; yl++)
+            {
+              if (allow_pixel_draw[yl])
+               {
+                // Draw the solid colour behind as indicated
+                view.drawPixel(x,yl,RGB_scale_TFT(color,(face_shade*(1.0-(perpWallDist*depth_shade))))); // An ordinary texture draw
+                allow_pixel_draw[yl]=false; // Clear it now we've drawn in it, this will be set from front backwards
+              }
+            } // End of loop to draw a line with transparency masking
+          } // End of if-else for transparency
+      }  // End of else for non-textured walls
+      } // End of wall SWITCH/CASE
+    } // End of outer DDA 'solid' while loop for transparency
+    } // End of X loop for pixel columns
 
 // ESP32: draws text on screen
     #ifdef RACER_DEBUG
@@ -515,6 +683,7 @@ int skystart=micros();
     // time = getTicks();
     int frameTime = newtime - startraytime; // simplified for Arduino
     #ifdef SHOW_RATE
+    Serial.print("FrameTime: ");
     Serial.println(frameTime); // output the raycast time
     #endif
     //double frameTime = (time - oldTtme) / 1000.0; //frameTime is the time this frame has taken, in seconds
@@ -611,5 +780,7 @@ int skystart=micros();
       planeX = planeX * cos(rotSpeed) - planeY * sin(rotSpeed);
       planeY = oldPlaneX * sin(rotSpeed) + planeY * cos(rotSpeed);
     }
-    
+#ifdef RACER_DEBUG
+Serial.println("After keys, end of loop");
+#endif    
   }

@@ -4,7 +4,8 @@
 #ifndef AMAZEGENERIC_H
 #define AMAZEGENERIC_H
 
-//#define RACER_DEBUG // a flag for debug statements
+//#define RACER_DEBUG // a flag for debug statementsbutton callback
+//#defein RACER_DEBUG_2 // debug statement in 
 //#define SHOW_MAZE // a flag to build in the aerial view maze on larger screen devices 
 #define SHOW_RATE // a flag to show frame rate via serial port
 
