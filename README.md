@@ -41,7 +41,7 @@ textures.h
 ----------
 Again, fairly self-explanatory.
 
-A 16 colour palette us define first in 32bit 0RGB format.
+A 16 colour palette is defined first in 32bit 0RGB format.
 
 Textures are 64px square in 0RGB 32 bit format. The upper 8 bits are ignored currently.
 
