@@ -107,6 +107,7 @@ TFT_eSprite player =  TFT_eSprite(&tft);
   float planeX = 0, planeY = 0.8; //zoom in via camera plane vector, default was 0.66
 
   const float one_over_screenWidth=1.0/VIEW_WIDTH; // A FPU multiply can be done later, no obvious time saving
+  const float aspect_correct=VIEW_WIDTH/VIEW_HEIGHT; // Adjust the heigght scalin gso the cells stay square
 
   unsigned long game_start_time,game_duration; // This will be used as the gameplay duration
   int maze_choice; // Which maze are we looking at?
@@ -166,7 +167,7 @@ void setup() {
   tft.fillScreen(TFT_BLACK); // clear the screen 
   tft.setRotation(1);
   tft.setSwapBytes(true); // Missing both, or just in 'frame', swaps gives the correct colour rendering
-  tft.pushImage(0,0,128,128,maze_title); // Show the startup image for the game
+  tft.pushImage((VIEW_WIDTH-128)/2,(VIEW_HEIGHT-128)/2,128,128,maze_title); // Show the startup image for the game - centred in VIEW AREA
 
   tft.setFreeFont(&Akhenaton_LYLD40pt7b);
   tft.setTextColor(TFT_WHITE);
@@ -185,10 +186,7 @@ void setup() {
 
   view.createSprite(VIEW_WIDTH,VIEW_HEIGHT);
   view.fillSprite(TFT_BLACK);// clear the view sprite frame buffer before we build the world
-  #ifdef SHOW_MAZE
-  mapview.createSprite(VIEW_WIDTH,VIEW_HEIGHT);
-  #endif
-
+  
   maze_choice=0; // Start on first worldMap
 
   sky_build();
@@ -484,8 +482,9 @@ int skystart=micros();
       key_wait();
       #endif
 
-      //Calculate height of line to draw on screen
-      int lineHeight = (int)((float)VIEW_HEIGHT / perpWallDist);
+      // Calculate height of line to draw on screen
+      // Adjusted to fit the VIEW aspect ratio
+      int lineHeight = (int)(aspect_correct*(float)VIEW_HEIGHT / perpWallDist);
       #ifdef RACER_DEBUG
       Serial.print("lineHeight :");
       Serial.print(lineHeight);
