@@ -45,10 +45,8 @@
 * Setting up full 16 bit use in the world map
 *****************************************************************************************************
 * THINGS TO DO
-* COMPLETE REFORMAT OF MAZE WORDS TO USE FULL 16 BITS and thus allow more tetures
-* Can transparent textures be 'thin'?
+* Make transparent textures 'thin'
 * Optimise transparency routine if possible
-* We've gone from duplicate rows being shown to just the face which doesn't make sense - why?
 ***************************************************************************************************** 
 */
 
@@ -106,11 +104,9 @@ TFT_eSprite player =  TFT_eSprite(&tft);
 
   float posX = START_X, posY = START_Y;  //x and y start position
   float dirX = -1, dirY = 0; //initial direction vector, this is upwards on TFT
-  //float planeX = 0, planeY = 0.66; //the 2d raycaster version of camera plane
-  float planeX = 0, planeY = 0.8; //zoom in via camera plane vector
+  float planeX = 0, planeY = 0.8; //zoom in via camera plane vector, default was 0.66
 
   const float one_over_screenWidth=1.0/VIEW_WIDTH; // A FPU multiply can be done later, no obvious time saving
-  //const float one_over_w=1.0/w; // Another FPU divide avoided
 
   unsigned long game_start_time,game_duration; // This will be used as the gameplay duration
   int maze_choice; // Which maze are we looking at?
@@ -123,10 +119,7 @@ TFT_eSprite player =  TFT_eSprite(&tft);
   // so each pixel is a fractional part of 2PI
   const float FOV_pixel = ((1<<SKY_SIZE)/VIEW_WIDTH)*(2*atan(sqrt(planeX*planeX+planeY*planeY)/sqrt(dirX*dirX+dirY*dirY)))/(2.f*M_PI);
   
-  // double time = 0; //time of current frame
-  // double oldTime = 0; //time of previous frame
   int newtime = 0; //time of current frame, Don't bother with floating point!
-  //int oldtime = 0; //time of previous frame
   int startraytime; // time that raycasting entered
 
 // Reset postion and planes for use between levels
@@ -138,7 +131,7 @@ void player_position_reset()
   }
 
 // RGB scaled and adjusted to 565 for TFT
-// Tried using fixed point but just made more trouble and ESP32S3 float is reputedly just as fast
+// Tried using fixed point but just made more trouble and ESP32S3 float is reputedly just as fast, at least for multiply
 uint16_t RGB_scale_TFT(uint32_t RedGreenBlue,float scale)
   {
     uint32_t long_red, long_green, long_blue;
@@ -197,11 +190,6 @@ void setup() {
   #endif
 
   maze_choice=0; // Start on first worldMap
-
-#ifdef SHOW_MAZE
-  maze_init();
-  draw_maze();
-#endif
 
   sky_build();
 
@@ -281,7 +269,8 @@ Serial.println("Start of loop");Serial.println("");
         unsigned long color;
         if (!(texNum & MAP_WALL_FLAG)) // It's a wall, not a floor, so skip mapping into a tile and sending pixels
         // If it's a transparent block then some floor errors may be seen - make it higher!
-        // This does mean that some sections of the floor are not drawn but they should be covered with wall! 
+        // This does mean that some sections of the floor are not drawn but they should be covered with wall
+        // Except for some transparent designs 
         // This should also save time especially when they are textured
         {
         if (texNum & MAP_TEXTURE_FLAG)
@@ -339,8 +328,6 @@ int skystart=micros();
   for (int x=0;x<VIEW_WIDTH;++x)
     { // Display the visible skyline of mountains in it
       int back_index=SKY_MASK & (int)((FOV_pixel*(float)x)+start_index); // Corrected to show correct FOV
-      //int back_index=SKY_MASK & (int)(x+start_index); // Simpler but better effect?
-      //Serial.println(FOV_pixel);
       view.drawFastVLine(x, VIEW_HEIGHT/2-back_height[back_index], back_height[back_index], SKY_BROWN);
       
       // Check and maybe draw snow, from the mountain peak dowm which is increasing pixel Y position 
@@ -358,6 +345,7 @@ int skystart=micros();
     // WALL CASTING WITH SHADING AND OPTIONAL TEXTURES
     for(int x = 0; x < VIEW_WIDTH; x++) // Step across the display
     {
+      uint16_t texNum; // A value which will be set from the world array
       bool hit, solid, poss_transp;
       // These flags are all cleared at the start of a new pixel column
       solid=false; // Set if the wall is solid ie not a transparent texture
@@ -401,7 +389,6 @@ int skystart=micros();
       int stepY;
 
 
-      //int hit = 0; //was there a wall hit?
       int side; //was a NS or a EW wall hit?
 
       //calculate step and initial sideDist
@@ -446,19 +433,20 @@ int skystart=micros();
           side = 1;
         }
         //Check if ray has hit a wall
-        //if(MAP_WALL_FLAG & worldMap[maze_choice][mapX][mapY]) hit = 1;
-        hit = MAP_WALL_FLAG & worldMap[maze_choice][mapX][mapY]; // So the loop will exit whatever type of wall is hit
+        texNum = worldMap[maze_choice][mapX][mapY]; // Find out what the cell codes for, we use the variable later
+        hit= MAP_WALL_FLAG & texNum; // So the loop will exit whatever type of wall is hit
+
       } // End of raycast DDA while loop
       // Will only exit here is the raycast has hit something
 
       // If it isn't a transparent wall it must be solid so set the flag to exit the DDA cycle at the 'solid' while
-      solid = !(MAP_TRANSP_FLAG & worldMap[maze_choice][mapX][mapY]); // If it is transparent then DDA will be restarted after drawing
+      solid = !(MAP_TRANSP_FLAG & texNum); // If it is transparent then DDA will be restarted after drawing
 
       #ifdef RACER_DEBUG
       Serial.print("X :");
       Serial.print(x);
       Serial.print("Maze map :");
-      Serial.print(worldMap[maze_choice][mapX][mapY]);
+      Serial.print(texNum);
       Serial.print("Hit :");
       Serial.print(hit);
       Serial.print("Solid :");
@@ -470,7 +458,7 @@ int skystart=micros();
         {
         #ifdef RACER_DEBUG
         Serial.print("Set pos_transp :");
-        Serial.println(worldMap[maze_choice][mapX][mapY]);
+        Serial.println(texNum);
         #endif
           poss_transp=true;
           // As it's a transparent texture we need to invoke the transparency buffer
@@ -485,15 +473,16 @@ int skystart=micros();
       //for size == 1, but can be simplified to the code below thanks to how sideDist and deltaDist are computed:
       //because they were left scaled to |rayDir|. sideDist is the entire length of the ray above after the multiple
       //steps, but we subtract deltaDist once because one step more into the wall was taken above.
+
+
       if(side == 0) perpWallDist = (sideDistX - deltaDistX);
       else          perpWallDist = (sideDistY - deltaDistY);
 
-      // Hoped to add 0.5 deltaDist X or Y  to step half a cell
-      // to appear in the centre of the cell for transparent textures
-      // but it didn't work (yet)
-//Serial.print(sideDistX);Serial.print(" ");Serial.print(sideDistY);Serial.print(" ");Serial.print(deltaDistX);Serial.print(" ");Serial.print(deltaDistY);Serial.println(" ");
-
-
+      #ifdef RACER_DEBUG_2
+      Serial.print("Side ");Serial.print(side);Serial.print(" sideDist ");Serial.print(sideDistX);Serial.print(" ");Serial.print(sideDistY);
+      Serial.print(" deltaDist ");Serial.print(deltaDistX);Serial.print(" ");Serial.print(deltaDistY);Serial.print(" Perp");Serial.println(perpWallDist);
+      key_wait();
+      #endif
 
       //Calculate height of line to draw on screen
       int lineHeight = (int)((float)VIEW_HEIGHT / perpWallDist);
@@ -504,7 +493,6 @@ int skystart=micros();
       Serial.println(perpWallDist);
       #endif
       //calculate lowest and highest pixel to fill in current stripe
-      // Doing the range limitation casues sudden scale chnages as a texture is approached
       // Whilst the TFT library is supposed to be safe to read out of range,
       // at close up the transparency buffer is written out of range
       //if (lineHeight>=VIEW_HEIGHT) lineHeight=VIEW_HEIGHT-1; // AKJ adaptation as TFT vline does 'height' rather than' 'end'
@@ -513,8 +501,6 @@ int skystart=micros();
       int drawEnd = (lineHeight / 2) + VIEW_HEIGHT/2; // DrawEnd is needed for textured walls
       if(drawEnd >= VIEW_HEIGHT) drawEnd = VIEW_HEIGHT - 1;
 
-      uint16_t texNum = worldMap[maze_choice][mapX][mapY]; // Find out what the cell codes for
-
       switch (texNum & (MAP_WALL_FLAG | MAP_TEXTURE_FLAG | MAP_TRANSP_FLAG)) // Mask off everything but the various wall flags
       {
       case MAP_WALL_FLAG | MAP_TEXTURE_FLAG: // handle an ordinary textured wall
@@ -522,7 +508,6 @@ int skystart=micros();
       Serial.println("Textured solid wall cell");
       #endif
       // This is the start of the textured wall element
-      //if (texNum & MAP_TEXTURE_FLAG)
         { // The cell is textured wall
         //calculate value of wallX
         float wallX; //where exactly the wall was hit
@@ -629,16 +614,12 @@ int skystart=micros();
 
       {
         //choose wall color
-// ESP32: adapt colours
-        // ColorRGB color;
         int color=palette[MAP_CHOICE_MASK & texNum];
 
         //give x and y sides different brightness
-// ESP32: this shade adaptation won't work with TFT colour mapping, so we have our own shader
         if(side == 1) {face_shade=SIDE_SCALE;} else {face_shade=1.0;} 
 
         //draw the pixels of the stripe as a vertical line
-// ESP32: Draw a verical line 
         // shaded for depth cueing
         // If the scan column is not transparent then just draw a line
         if (!poss_transp) view.drawFastVLine(x, drawStart, lineHeight, RGB_scale_TFT(color,(face_shade*(1.0-(perpWallDist*depth_shade))))); // No transparency issues
@@ -670,28 +651,18 @@ int skystart=micros();
  
  // ESP32: redraws the screen buffer after everything has been placed
     view.pushSprite(0,0); // Display the view sprite on the TFT
-    //redraw();
-// ESP32: clears the screen to BLACK if no RGB values given
-    //view.fillSprite(TFT_BLACK);
+
+    //view.fillSprite(TFT_BLACK); // No need to clear the screen as it's filled with fresh pixels
     view.fillRect(0, 0, VIEW_WIDTH, FLOOR_HORIZON, TFT_BLACK) ; // Just clear the top half, no apparent time saving
-    // cls();
 
    //timing for input and FPS counter
-    //oldtime = newtime;
-  // ESP32: returns time in ms since programme started
     newtime=millis(); // Arduino system time
-    // time = getTicks();
     int frameTime = newtime - startraytime; // simplified for Arduino
     #ifdef SHOW_RATE
     Serial.print("FrameTime: ");
     Serial.println(frameTime); // output the raycast time
     #endif
-    //double frameTime = (time - oldTtme) / 1000.0; //frameTime is the time this frame has taken, in seconds
-    // print(1.0 / frameTime); //FPS counter
 
-#ifdef SHOW_MAZE
-    draw_maze(); // show the top view after each move, perhaps this is a debug feature?
-#endif
     #ifdef RACER_DEBUG
     // This is the end of raycasting so how long has it taken?
     // Without the maze and print statements it's around 12ms
@@ -702,8 +673,6 @@ int skystart=micros();
     #endif
 
     //speed modifiers
-    //double moveSpeed = frameTime * 5.0; //the constant value is in squares/second
-    //double rotSpeed = frameTime * 3.0; //the constant value is in radians/second
     float moveSpeed=0.003*(float)frameTime; // in milliseconds
     float rotSpeed=0.001*(float)frameTime;
     
@@ -718,8 +687,6 @@ int skystart=micros();
     if ((key_pressed & (BIT_CONTROL_RIGHT | BIT_CONTROL_LEFT))==(BIT_CONTROL_RIGHT | BIT_CONTROL_LEFT)) // Forwards if both down
     #endif
     {
-      // if(worldMap[int(posX + dirX * moveSpeed)][int(posY)] == false) posX += dirX * moveSpeed;
-      //if(worldMap[int(posX)][int(posY + dirY * moveSpeed)] == false) posY += dirY * moveSpeed;
       // It seems better if it stops once wall hit, rather than sliding along
       // and also needs to look a bigger step away so as not to become 'embedded' in the wall
       // hence the 5*dirX
@@ -739,8 +706,6 @@ int skystart=micros();
   #ifdef FOUR_BUTTONS
   if (key_pressed & BIT_CONTROL_DOWN)
     {
-      //if(worldMap[int(posX - dirX * moveSpeed)][int(posY)] == false) posX -= dirX * moveSpeed;
-      //if(worldMap[int(posX)][int(posY - dirY * moveSpeed)] == false) posY -= dirY * moveSpeed;
       if((MAP_WALL_FLAG & worldMap[maze_choice][int(posX - 5*dirX * moveSpeed)][int(posY - 5*dirY * moveSpeed)]) == false)
       {
         posX -= dirX * moveSpeed;

@@ -27,7 +27,7 @@ Here you can define FOUR_BUTTONS for four buttons or comment out to use just two
 
 VIEW_WIDTH and VIEW_HEIGHT are self-explanatory. 128 square is default and with current (lack of) optimisations a maximum size of 170 square or 150 by 200 makes sense. The title screen is only 128px square anyway so looks untidy to do more.
 
-There are various debug and optional defines annotated. SHOW_MAZE is of interest to users with larger displays as it will do a map on the right hand side of the screen. This makes the task easier but can also be used to help world-building.
+There are various debug and optional defines annotated.
 
 maze.h
 ------

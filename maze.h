@@ -13,7 +13,6 @@
 
 // Function prototypes
 void maze_init();
-void draw_maze();
 
 #define screenWidth VIEW_WIDTH//640
 #define screenHeight VIEW_HEIGHT//480
@@ -22,8 +21,6 @@ void draw_maze();
 
 #define START_X 19.5 // Start in the middle of the tile
 #define START_Y 19.5
-
-#define MAZE_PIXELS_PER_CELL (VIEW_WIDTH/mapWidth)
 
 #define MAX_MAZE_CHOICES 3 // How many maze arrays  worlds are there?
 

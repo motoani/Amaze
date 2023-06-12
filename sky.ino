@@ -24,10 +24,6 @@ for(power_loop=(SKY_SIZE-2);power_loop>=0;--power_loop)
     spikes=power_loop*(VIEW_HEIGHT/4)/(SKY_SIZE-2); // Used to set how much variation is built into the average
     do
     {
-      //Serial.print("Slots ");Serial.print(slots-slice);Serial.print(" ");Serial.println(slots+slice);
-      //Serial.print(back_height[slots-slice]);Serial.print(" ");
-      //Serial.println(back_height[SKY_MASK & (slots+slice)]);
-      
       // Average slots 0 and 2 to make 1 with a bit of randomisation adjustment
       new_value=(random(0,spikes)-spikes/2)+(back_height[slots-slice]+back_height[SKY_MASK & (slots+slice)])/2;
 
@@ -46,6 +42,5 @@ for(power_loop=(SKY_SIZE-2);power_loop>=0;--power_loop)
       //delay(1500);
     }
     while (slots <= 1<<SKY_SIZE);
-  //Serial.println("Next set");
   }
 }
