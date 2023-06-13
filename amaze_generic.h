@@ -19,8 +19,9 @@
 
 // The starter screen is only 128px square so other sizes give an untidy start
 // Setting anything much larger than 170 square seems a bit much for a single core ESP32
-// 16:9 is 227x128 looks wide and frame time 60 to 70+ ms with multiple transparencies
-#define VIEW_WIDTH  128  // Set for Volo's competition with the little display to 128px
+// 16:9 is 227x128 looks wide and frametime 60 to 70+ms with multiple transparencies
+// 16:9 also 170 x 302 gives rough playback with frametime exceeding 110ms
+#define VIEW_WIDTH  128  // Set for Volo's competition with the little display to 128px, frametime 20 to 40ms
 #define VIEW_HEIGHT 128 // AT 170 for T-display S3 the update time can reach 73ms if texture fills the screen
 
 #define FLOOR_HORIZON (3+ VIEW_HEIGHT/2) // start raycasting the floor a bit below horizontal as the rays that probe infinity are 'wasted'
