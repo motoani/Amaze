@@ -1,6 +1,10 @@
 # Amaze
 A maze game for ESP32 in Arduino framework. Makes a raycast 2.5D world. Easy to define new levels.
 
+v1.3 of 2023-06-23 Gives dual core rendering and scaled title screens
+* Cores render odd and even pixel columns to split load
+* Title (and end) screen scale to match VIEW
+
 v1.2 of 2023-06-07 Has some bugs removed and adds:
 * Transparent textures
 * 16 bit world map to enable more feature in the future

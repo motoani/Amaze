@@ -44,3 +44,61 @@ for(power_loop=(SKY_SIZE-2);power_loop>=0;--power_loop)
     while (slots <= 1<<SKY_SIZE);
   }
 }
+
+void show_sky( void * parameter)
+{
+  for(;;) // Loop forever
+  {
+    // Wait until the bits say we can run
+    xEventGroupWaitBits(
+                       raycast_event_group,               // event group handle
+                       SKY_REDRAW,                        // bits to wait for
+                       pdTRUE,                            // clear the bit once we've started
+                       pdFALSE,                           //  OR for any of the defined bits
+                       portMAX_DELAY );                   //  block forever
+  #ifdef RACER_DEBUG
+Serial.println("Start of drawing the skyscape");
+int skystart=micros();
+#endif
+
+// Use the sky/mountain array to build the top half of the display
+// This takes between 500 and 900 microseconds dependent on mountain and snow lengths at 170 pixels square
+// Start by colouring the 'sky'
+  view.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT/2, SKY_BLUE); // This will leave a slight gap at horizon
+
+// Now use the array to make the mountain range
+// Use the camera plane vector to choose starting point in the array
+// Whilst the view is centred perpendicular to the plane, and that would be the middle of the FOV
+// as this is just a constant rotation value it can be ignored!
+
+  // Work out which way we are facing
+    float FOV_angle=atan2(dirY,dirX);
+    if (dirY<0) FOV_angle=M_PI*2.f + FOV_angle; // Adjust so always zero to 2*PI]
+    
+    FOV_angle=(M_PI*2.f)-FOV_angle; // But switch direction!
+    int start_index=(int)((1<<SKY_SIZE)*(FOV_angle*one_over_2pi)); // Swapped a divide for a multiply by the reciprocal although not a time critical spot
+
+#ifdef RACER_DEBUG
+  Serial.print ("Angle ");
+  Serial.print(FOV_angle); // Where are we facing?
+  Serial.print(" ");
+  Serial.println(start_index);
+#endif
+
+  for (int x=0;x<VIEW_WIDTH;++x)
+    { // Display the visible skyline of mountains in it
+      int back_index=SKY_MASK & (int)((FOV_pixel*(float)x)+start_index); // Corrected to show correct FOV, MASK does the wrap-around
+      view.drawFastVLine(x, VIEW_HEIGHT/2-back_height[back_index], back_height[back_index], SKY_BROWN);
+      
+      // Check and maybe draw snow, from the mountain peak dowm which is increasing pixel Y position 
+      if (snow_height) view.drawFastVLine(x, VIEW_HEIGHT/2-back_height[back_index], snow_height[back_index], SKY_SNOW);
+    }
+    #ifdef RACER_DEBUG
+    int skyend=micros();
+    Serial.print("sky ");Serial.println(skyend-skystart);
+    #endif
+    xEventGroupSetBits(
+                      raycast_event_group,     // the handle
+                      SKY_READY);             // set a bit to say we've rendered it
+} // End of loop forever
+}
