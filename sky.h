@@ -14,7 +14,7 @@
 #define SKY_SNOW 0xEF7F // Mountain snow
 
 void sky_build();
-
+void show_sky( void * parameter);
 
 
 #endif

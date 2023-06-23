@@ -32,6 +32,12 @@
   // Various RTOS-related variables
   TimerHandle_t Debounce_Reload_Timer;  // A software timer to debounce the controller keys
   BaseType_t DRT_Started;
+
+  #if defined SHOW_RATE  
+  TimerHandle_t FPS_Reload_Timer;      // A software timer to record fps
+  BaseType_t FRT_Started;
+  #endif
+
   QueueHandle_t Controller_key_queue; // Button status will be stuffed into here
 
   // Variables and constants

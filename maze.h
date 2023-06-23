@@ -14,8 +14,6 @@
 // Function prototypes
 void maze_init();
 
-#define screenWidth VIEW_WIDTH//640
-#define screenHeight VIEW_HEIGHT//480
 #define mapWidth 21
 #define mapHeight 21
 

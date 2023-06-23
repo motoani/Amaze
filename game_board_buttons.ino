@@ -5,6 +5,7 @@
 * If there were to be more than one instance  it might be worth the struggle
 * but I didn't realise what a complex issue this is!
 * Simplified 2023-05-09 to remove edge detection and simply return status
+* NOTE that this doesn't require FPU so doesn't invoke exception in 'lazy context switching'
 */
 #include "game_board_buttons.h"
 
@@ -62,6 +63,15 @@ void key_debounce_init(){ // Initialise both the hardware and RTOS
   for (uint8_t pin: control_pins) pinMode(pin,INPUT_PULLUP);
 
   // Setup RTOS tasks to deal with jobs
+  #if defined SHOW_RATE  
+  FPS_Reload_Timer = xTimerCreate(
+    "TimerForFPSCOUNTER",  // Text name
+    pdMS_TO_TICKS(1000),               // The interval between firing timer
+    pdTRUE,                           // reload the timer after firing
+    0,                                // Does not use a timer ID
+    fps_callback );          // the function executed on the call back
+  #endif
+
   Debounce_Reload_Timer = xTimerCreate(
     "TimerForControllerKeyDebounce",  // Text name
     pdMS_TO_TICKS(10),               // The interval between firing timer
@@ -81,7 +91,24 @@ void key_debounce_init(){ // Initialise both the hardware and RTOS
       DRT_Started= xTimerStart(Debounce_Reload_Timer,0);     // Set the key debounce timer running
       }
       else Serial.println("Error starting debounce timer");
+
+     #if defined SHOW_RATE  
+     if ((FPS_Reload_Timer != NULL) && TRUE)
+      {
+      FRT_Started= xTimerStart(FPS_Reload_Timer,0);     // Set the key debounce timer running
+      }
+    else Serial.println("Error starting fps timer");
+    #endif
+
 } // End of init function
+
+#if defined SHOW_RATE  
+void fps_callback(TimerHandle_t xTimer)
+{
+  Serial.print("fps: ");Serial.println(fps);//Serial.print(" heap: ");Serial.println(ESP.getFreeHeap());  
+  fps=0; // Rest the counter
+}
+#endif
 
 void key_debounce_callback(TimerHandle_t xTimer)
   { 
@@ -90,6 +117,8 @@ void key_debounce_callback(TimerHandle_t xTimer)
   bool newkeys[CONTROL_PIN_COUNT];
   int pin_pos;
   uint8_t key_pressed=0;
+
+  //Serial.println("################ KEYS #################");
 
   // Check all of the input lines; with better hardware design could be byte-wise
   // Although that wouldn't be generic for Arduino
